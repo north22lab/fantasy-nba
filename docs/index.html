@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fantasy NBA Tracker</title>
+<style>
+:root{--bg:#eef0f3;--s:#fff;--ink:#14213d;--mut:#5b6578;--line:#d5d9e1;--acc:#e8590c;--up:#157f6b;--dn:#c0392b;--wn:#b7791f}
+@media (prefers-color-scheme:dark){:root{--bg:#0e1626;--s:#16213a;--ink:#e8ecf4;--mut:#9aa6bd;--line:#2a3857;--acc:#ff8a3d;--up:#3ccfb0;--dn:#ff7a6b;--wn:#f0b955}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,sans-serif}
+.w{max-width:1000px;margin:0 auto;padding:24px 16px 60px}h1{margin:0;font-size:2rem}.sub{color:var(--mut);margin:2px 0 18px}
+.bar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.bar button,.bar input,.bar select{font:inherit;padding:8px 12px;border:1px solid var(--line);background:var(--s);color:var(--ink);border-radius:6px}
+.bar input{flex:1;min-width:150px}.bar button[aria-pressed=true]{border-color:var(--acc);color:var(--acc);font-weight:600}
+.sc{overflow-x:auto;background:var(--s);border:1px solid var(--line);border-radius:6px}
+table{width:100%;border-collapse:collapse;min-width:720px}th,td{padding:9px 11px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
+th{color:var(--mut);cursor:pointer;font-size:.9rem}.n{text-align:right;font-variant-numeric:tabular-nums}
+.up{color:var(--up);font-weight:600}.dn{color:var(--dn);font-weight:600}.t{color:var(--mut);font-size:.85rem}
+.tag{font-size:.78rem;font-weight:600;padding:1px 8px;border-radius:99px;border:1px solid currentColor}
+.OUT,.DOUBTFUL{color:var(--dn)}.QUESTIONABLE,.DAY_TO_DAY{color:var(--wn)}.ACTIVE{color:var(--mut)}
+.ch{background:var(--s);border-left:4px solid var(--acc);padding:8px 12px;margin-bottom:8px}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid var(--acc)}
+</style></head><body><div class="w">
+<h1 id="ttl">Fantasy NBA Tracker</h1><p class="sub" id="upd">Loading…</p>
+<div class="bar" id="tabs">
+<button data-v="players" aria-pressed="true">Players</button><button data-v="inj" aria-pressed="false">Injuries</button>
+</div>
+<div id="players"><div class="bar">
+<select id="src"><option value="mine">My team</option><option value="all">All rostered</option><option value="fa">Free agents</option></select>
+<input id="q" type="search" placeholder="Search player or team"></div>
+<div class="sc"><table><thead><tr><th data-s="name">Player</th><th data-s="status">Status</th><th data-s="season" class="n">Season</th><th data-s="l7" class="n">L7</th><th data-s="l15" class="n">L15</th><th data-s="l30" class="n">L30</th><th data-s="diff" class="n">Trend</th><th data-s="games" class="n">Games 7d</th><th data-s="pct_owned" class="n">%Own</th><th data-s="owner">Owner</th></tr></thead><tbody id="rows"></tbody></table></div>
+<p class="t">Fantasy points per game. Trend = last 7 vs season. Click a column to sort.</p></div>
+<div id="inj" hidden></div></div>
+<script>
+var D=null,sort="l7",dir=-1,view="players";
+function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
+function f(v,d){return v==null?"–":Number(v).toFixed(d==null?1:d)}
+function load(){fetch("data.json?"+Date.now()).then(function(r){return r.json()}).then(function(d){
+D=d;D.players.forEach(function(p){p.diff=(p.l7!=null&&p.season!=null)?p.l7-p.season:null});
+document.getElementById("ttl").textContent=d.league||"Fantasy NBA Tracker";
+var m=Math.round((Date.now()-new Date(d.updated))/60000);
+document.getElementById("upd").textContent="Data updated "+(m<90?m+" min":Math.round(m/60)+" h")+" ago. This page checks for new data every 5 minutes.";
+var s=document.getElementById("src");if(!d.mine.length){s.querySelector('[value=mine]').remove();s.value="all"}
+render()}).catch(function(){document.getElementById("upd").textContent="No data yet. Run the “Update fantasy data” workflow in GitHub Actions."})}
+function render(){if(!D)return;
+var src=document.getElementById("src").value,q=document.getElementById("q").value.toLowerCase();
+var r=D.players.filter(function(p){
+var ok=src=="fa"?!p.owner:src=="mine"?D.mine.indexOf(p.name)>-1:!!p.owner;
+return ok&&(p.name+" "+p.team).toLowerCase().indexOf(q)>-1});
+r.sort(function(a,b){var x=a[sort],y=b[sort];if(x==null)return 1;if(y==null)return -1;
+return(typeof x=="string"?x.localeCompare(y):x-y)*dir});
+document.getElementById("rows").innerHTML=r.map(function(p){
+var c=p.diff==null?"":p.diff>=0?"up":"dn";
+return"<tr><td><b>"+esc(p.name)+"</b><div class=t>"+esc(p.team)+" · "+esc(p.pos)+"</div></td><td><span class='tag "+esc(p.status)+"'>"+esc(p.status)+"</span></td><td class=n>"+f(p.season)+"</td><td class=n>"+f(p.l7)+"</td><td class=n>"+f(p.l15)+"</td><td class=n>"+f(p.l30)+"</td><td class='n "+c+"'>"+(p.diff==null?"–":(p.diff>=0?"+":"")+p.diff.toFixed(1))+"</td><td class=n>"+(p.games==null?"–":p.games)+"</td><td class=n>"+f(p.pct_owned,0)+"</td><td>"+esc(p.owner||"Free agent")+"</td></tr>"}).join("")||"<tr><td colspan=10>No players match.</td></tr>";
+var out=D.players.filter(function(p){return p.status!="ACTIVE"&&p.owner&&(D.mine.length?D.mine.indexOf(p.name)>-1:true)});
+document.getElementById("inj").innerHTML="<h3>Recent status changes</h3>"+(D.changes.length?D.changes.map(function(c){return"<div class=ch><b>"+esc(c.name)+"</b>: "+esc(c.from)+" → "+esc(c.to)+" <span class=t>"+esc(c.at.replace("T"," "))+"</span></div>"}).join(""):"<p class=t>No changes recorded yet. They appear after the second update.</p>")+
+"<h3>Currently not active"+(D.mine.length?" (your team)":"")+"</h3>"+(out.map(function(p){return"<div class=ch><b>"+esc(p.name)+"</b> <span class='tag "+esc(p.status)+"'>"+esc(p.status)+"</span> <span class=t>"+esc(p.team)+"</span></div>"}).join("")||"<p class=t>Nobody.</p>")}
+document.querySelectorAll("th[data-s]").forEach(function(h){h.onclick=function(){var k=h.dataset.s;if(sort==k)dir=-dir;else{sort=k;dir=(k=="name"||k=="owner"||k=="status")?1:-1}render()}});
+document.getElementById("src").onchange=render;document.getElementById("q").oninput=render;
+document.querySelectorAll("#tabs button").forEach(function(b){b.onclick=function(){view=b.dataset.v;
+document.querySelectorAll("#tabs button").forEach(function(x){x.setAttribute("aria-pressed",x===b)});
+document.getElementById("players").hidden=view!="players";document.getElementById("inj").hidden=view!="inj"}});
+load();setInterval(load,300000);
+</script></body></html>
